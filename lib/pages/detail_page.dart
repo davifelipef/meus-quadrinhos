@@ -28,43 +28,29 @@ class _DetailPageState extends State<DetailPage> {
   }
 
   void _loadIssues() {
-  final comicData = widget.item;
-  final issuesKey = comicData["issuesKey"];
-  if (issuesKey != null) {
-    final retrievedIssues = issuesBox.get(issuesKey);
-    if (retrievedIssues != null && retrievedIssues is List<dynamic>) {
-      List<Map<String, String>> convertedIssues = [];
-      for (var issue in retrievedIssues) {
-        if (issue is Map<dynamic, dynamic>) {
-          // Convert dynamic map to Map<String, String>
-          Map<String, String> convertedIssue = {};
-          issue.forEach((key, value) {
-            convertedIssue[key.toString()] = value.toString();
-          });
-          convertedIssues.add(convertedIssue);
+    final comicData = widget.item;
+    final issuesKey = comicData["issuesKey"];
+    if (issuesKey != null) {
+      final retrievedIssues = issuesBox.get(issuesKey);
+      if (retrievedIssues != null && retrievedIssues is List<dynamic>) {
+        List<Map<String, String>> convertedIssues = [];
+        for (var issue in retrievedIssues) {
+          if (issue is Map<dynamic, dynamic>) {
+            // Convert dynamic map to Map<String, String>
+            Map<String, String> convertedIssue = {};
+            issue.forEach((key, value) {
+              convertedIssue[key.toString()] = value.toString();
+            });
+            convertedIssues.add(convertedIssue);
+          }
         }
+        setState(() {
+          issues = convertedIssues;
+          _sortIssues();
+        });
       }
-      setState(() {
-        issues = convertedIssues;
-        _sortIssues();
-      });
     }
   }
-}
-
-
-  /*void _loadIssues() {
-  final comicData = widget.item;
-  final issuesKey = comicData["issuesKey"];
-  if (issuesKey != null) {
-    final retrievedIssues = issuesBox.get(issuesKey) as List<Map<String, dynamic>>; 
-    setState(() {
-      issues = retrievedIssues;
-      _sortIssues();
-    });
-  }
-}*/
-
 
   void _sortIssues() {
     issues.sort((a, b) {
@@ -72,21 +58,25 @@ class _DetailPageState extends State<DetailPage> {
     });
   }
 
-  void _addNewIssue(String title, String description) {
+  void _addNewIssue(String title, String description, [int? index]) {
     final newIssue = {
       "issue title": title,
       "issue description": description,
     };
 
     setState(() {
-      issues.add(newIssue);
+      if (index != null) {
+        issues[index] = newIssue;
+      } else {
+        issues.add(newIssue);
+      }
       _sortIssues();
     });
 
     final issuesKey = widget.item["issuesKey"];
     issuesBox.put(issuesKey, issues);
 
-    // Print all issues after adding the new one
+    // Print all issues after adding/updating the issue
     final keys = issuesBox.keys;
     for (var key in keys) {
       final issueList = issuesBox.get(key);
@@ -100,9 +90,12 @@ class _DetailPageState extends State<DetailPage> {
     }
   }
 
-  Future<void> _deleteIssue(int itemKey) async {
-    await issuesBox.delete(itemKey);
-    _loadIssues();
+  Future<void> _deleteIssue(int index) async {
+    setState(() {
+      issues.removeAt(index);
+    });
+    final issuesKey = widget.item["issuesKey"];
+    issuesBox.put(issuesKey, issues);
     _deletedIssueMessage();
   }
 
@@ -114,15 +107,23 @@ class _DetailPageState extends State<DetailPage> {
     );
   }
 
-  void _showForm(BuildContext context) {
+  void _showForm(BuildContext context, [Map<String, dynamic>? currentIssue, int? index]) {
+    if (currentIssue != null) {
+      _newIssueTitle = currentIssue["issue title"]!;
+      _newIssueDescription = currentIssue["issue description"]!;
+    } else {
+      _newIssueTitle = "";
+      _newIssueDescription = "";
+    }
+
     showModalBottomSheet(
       context: context,
       builder: (context) => Form(
         key: _formKey,
         child: Padding(
-            padding: EdgeInsets.only(
+          padding: EdgeInsets.only(
             bottom: MediaQuery.of(context).viewInsets.bottom,
-            top: 15,
+            top: 10,
             left: 15,
             right: 15
           ),
@@ -130,6 +131,7 @@ class _DetailPageState extends State<DetailPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextFormField(
+                initialValue: _newIssueTitle,
                 decoration: const InputDecoration(
                   labelText: "Título da edição",
                 ),
@@ -142,6 +144,7 @@ class _DetailPageState extends State<DetailPage> {
                 onSaved: (value) => setState(() => _newIssueTitle = value!),
               ),
               TextFormField(
+                initialValue: _newIssueDescription,
                 decoration: const InputDecoration(
                   labelText: "Descrição da edição",
                 ),
@@ -162,7 +165,7 @@ class _DetailPageState extends State<DetailPage> {
                 onPressed: () {
                   if (_formKey.currentState!.validate()) {
                     _formKey.currentState!.save();
-                    _addNewIssue(_newIssueTitle, _newIssueDescription);
+                    _addNewIssue(_newIssueTitle, _newIssueDescription, index);
                     Navigator.pop(context);
                   }
                 },
@@ -180,11 +183,11 @@ class _DetailPageState extends State<DetailPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.item["comic"] ?? "Detalhes",
-            style: const TextStyle(
-              fontSize: 20,
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            )),
+          style: const TextStyle(
+            fontSize: 20,
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          )),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -193,13 +196,13 @@ class _DetailPageState extends State<DetailPage> {
           children: [
             Expanded(
               child: issues.isEmpty
-              ? const Center(
+                ? const Center(
                   child: Text(
                     "Nenhuma edição adicionada ainda.",
                     style: TextStyle(fontSize: 18, color: Colors.grey),
                   ),
                 )
-              :ListView.builder(
+                : ListView.builder(
                 itemCount: issues.length,
                 itemBuilder: (context, index) {
                   final currentIssue = issues[index];
@@ -215,15 +218,11 @@ class _DetailPageState extends State<DetailPage> {
                         children: <Widget>[
                           IconButton(
                             icon: const Icon(Icons.edit),
-                            onPressed: () => _showForm(
-                              context,
-                            ),
+                            onPressed: () => _showForm(context, currentIssue, index),
                           ),
                           IconButton(
                             icon: const Icon(Icons.delete),
-                            onPressed: () => _deleteIssue(
-                              index,
-                            ),
+                            onPressed: () => _deleteIssue(index),
                           ),
                         ],
                       ),

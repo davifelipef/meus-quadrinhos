@@ -19,8 +19,11 @@ class _HomePageState extends State<HomePage> {
 
   List<Map<String, dynamic>> _items = [];
   List<Map<String, dynamic>> _filteredItems = [];
+  Map<String, dynamic>? _selectedItem;
+
   final _comicsBox = Hive.box("comics_box");
   final _issuesBox = Hive.box("issues");
+  final _formKey = GlobalKey<FormState>();
 
   @override
   void initState() {
@@ -82,6 +85,7 @@ class _HomePageState extends State<HomePage> {
     await _issuesBox.delete(itemKey); // Delete associated issues
     _refreshItems();
     _deletedItemMessage();
+    _selectedItem = null; // hides the delete icon from the app bar
   }
 
   Future<void> _deletedItemMessage() async {
@@ -90,6 +94,20 @@ class _HomePageState extends State<HomePage> {
         content: Text("Quadrinho deletado da coleção."),
       ),
     );
+  }
+
+  void _editItem() {
+    // Implement edit functionality
+    if (_selectedItem != null) {
+      _showForm(context, _selectedItem!["key"]);
+    }
+  }
+
+   void _itemToDelete() {
+    // Implement delete functionality
+    if (_selectedItem != null) {
+      _deleteItem(_selectedItem!["key"]);  // Assuming each item has a unique 'id'
+    }
   }
 
   void _showForm(BuildContext ctx, int? itemKey) async {
@@ -104,25 +122,38 @@ class _HomePageState extends State<HomePage> {
     }
 
     showModalBottomSheet(
-      context: ctx,
-      builder: (_) => Container(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom,
-          top: 15,
-          left: 15,
-          right: 15
-        ),
-        child: SingleChildScrollView(
+    context: ctx,
+    builder: (_) => Container(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(ctx).viewInsets.bottom,
+        top: 15,
+        left: 15,
+        right: 15,
+      ),
+      child: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
           child: Column(
             children: <Widget>[
-              TextField(
+              TextFormField(
                 controller: _collectionController,
                 decoration: const InputDecoration(hintText: "Nome da coleção"),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return "Por favor, insira o nome da coleção";
+                  }
+                  return null;
+                },
               ),
-              //const SizedBox(height: 20),
-              TextField(
+              TextFormField(
                 controller: _descriptionController,
                 decoration: const InputDecoration(hintText: "Descrição da coleção"),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return "Por favor, insira a descrição da coleção";
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 10),
               ElevatedButton(
@@ -131,20 +162,22 @@ class _HomePageState extends State<HomePage> {
                   foregroundColor: Colors.white,
                 ),
                 onPressed: () async {
-                  if (itemKey == null) {
-                    _createItem({
-                      "comic": _collectionController.text,
-                      "description": _descriptionController.text,
-                    });
-                  } else {
-                    _updateItem(itemKey, {
-                      "comic": _collectionController.text.trim(),
-                      "description": _descriptionController.text.trim(),
-                    });
+                  if (_formKey.currentState!.validate()) {
+                    if (itemKey == null) {
+                      _createItem({
+                        "comic": _collectionController.text.trim(),
+                        "description": _descriptionController.text.trim(),
+                      });
+                    } else {
+                      _updateItem(itemKey, {
+                        "comic": _collectionController.text.trim(),
+                        "description": _descriptionController.text.trim(),
+                      });
+                    }
+                    _collectionController.clear();
+                    _descriptionController.clear();
+                    Navigator.of(context).pop();
                   }
-                  _collectionController.clear();
-                  _descriptionController.clear();
-                  Navigator.of(context).pop();
                 },
                 child: const Text("Salvar"),
               ),
@@ -152,8 +185,9 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -169,12 +203,23 @@ class _HomePageState extends State<HomePage> {
         ),
         titleSpacing: 50,
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: _selectedItem != null
+            ? [
+                IconButton(
+                  icon: const Icon(Icons.edit),
+                  onPressed: _editItem,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete),
+                  onPressed: _itemToDelete,
+                ),
+              ]
+            : null,
       ),
-      //drawer: const MyDrawer(),
       body: Column(
         children: [
           SizedBox(
-            width: 470,
+            width: 350,
             child: Padding(
               padding: const EdgeInsets.all(10.0),
               child: TextField(
@@ -208,6 +253,7 @@ class _HomePageState extends State<HomePage> {
               itemCount: _filteredItems.length,
               itemBuilder: (_, index) {
                 final currentItem = _filteredItems[index];
+                final isSelected = _selectedItem == currentItem;
                 return GestureDetector(
                   onTap: () {
                     Navigator.push(
@@ -217,8 +263,13 @@ class _HomePageState extends State<HomePage> {
                       ),
                     );
                   },
+                  onLongPress: () {
+                    setState(() {
+                      _selectedItem = currentItem;
+                    });
+                  },
                   child: Card(
-                    color: Colors.blue.shade100,
+                    color: isSelected ? Colors.blue.shade200 : Colors.blue.shade100,
                     margin: const EdgeInsets.all(5),
                     elevation: 3,
                     child: Padding(
@@ -236,25 +287,6 @@ class _HomePageState extends State<HomePage> {
                           const SizedBox(height: 5),
                           Text(
                             currentItem["description"] ?? "",
-                          ),
-                          const Spacer(),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: <Widget>[
-                              IconButton(
-                                icon: const Icon(Icons.edit),
-                                onPressed: () => _showForm(
-                                  context,
-                                  currentItem["key"],
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete),
-                                onPressed: () => _deleteItem(
-                                  currentItem["key"],
-                                ),
-                              ),
-                            ],
                           ),
                         ],
                       ),
